@@ -229,8 +229,8 @@ html_code = """
 # Streamlit 컴포넌트로 HTML 코드 렌더링
 # height 값을 더 크게 조정하여 세로 화면을 거의 채우도록 설정
 # 적절한 높이 값은 사용자의 화면 해상도에 따라 다를 수 있으나,
-# 여기서는 1200 픽셀로 설정하여 대부분의 화면에서 크게 보이도록 합니다.
-components.html(html_code, height=1200, scrolling=False) # height 값을 1200으로 증가
+# 여기서는 1500 픽셀로 설정하여 대부분의 화면에서 크게 보이도록 합니다.
+components.html(html_code, height=1500, scrolling=False) # height 값을 1500으로 증가
 
 st.markdown("---")
 st.write("**참고:** 그림 저장 및 불러오기 기능은 제거되었습니다. '모두 지우기' 기능만 사용 가능합니다.")
