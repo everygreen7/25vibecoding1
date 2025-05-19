@@ -7,7 +7,7 @@ st.title("✨ Streamlit 디지털 칠판")
 st.write("아래 영역에서 자유롭게 그림을 그리거나 내용을 작성하세요.")
 
 # HTML, CSS, JavaScript 코드를 파이썬 문자열로 정의
-# 그림 저장 및 불러오기 버튼 제거, 캔버스 높이 조정 로직 유지
+# 그림 저장 및 불러오기 버튼 제거, 캔버스 높이 조정 로직 수정
 html_code = """
 <!DOCTYPE html>
 <html lang="ko">
@@ -30,14 +30,16 @@ html_code = """
             background-color: #fff; /* Streamlit 배경색과 맞추거나 투명하게 */
             color: #333;
             /* Streamlit에 임베드될 때는 body 패딩이나 마진을 제거하는 것이 좋습니다. */
-            /* padding: 0; */
-            /* margin: 0; */
+            padding: 0;
+            margin: 0;
             overflow: hidden; /* 스크롤 방지 */
+            width: 100%;
+            height: 100%; /* Ensure body takes full height of the component iframe */
         }
 
         #whiteboard-container {
             width: 100%;
-            height: 100%; /* 부모(컴포넌트) 높이에 맞춤 */
+            height: 100%; /* 부모(body) 높이에 맞춤 */
             display: flex;
             flex-direction: column;
             background-color: #fff; /* 칠판 배경색 */
@@ -55,6 +57,7 @@ html_code = """
             align-items: center;
             justify-content: center; /* 버튼 중앙 정렬 */
             border-bottom: 1px solid #eee;
+            flex-shrink: 0; /* Prevent controls from shrinking */
         }
 
         #whiteboard-controls button {
@@ -80,6 +83,8 @@ html_code = """
 
         #drawingCanvas {
             flex-grow: 1; /* 남은 공간 모두 사용 */
+            flex-shrink: 1; /* Allow canvas to shrink */
+            flex-basis: auto; /* Default basis */
             background-color: #fff; /* 칠판 배경색 */
             cursor: crosshair;
             /* 캔버스 자체의 너비/높이는 JavaScript로 설정 */
@@ -102,7 +107,7 @@ html_code = """
     <div id="whiteboard-container">
         <div id="whiteboard-controls">
             <button id="clearBtn"><i class="fas fa-eraser"></i> 모두 지우기</button>
-            </div>
+        </div>
         <canvas id="drawingCanvas"></canvas>
     </div>
 
@@ -114,10 +119,8 @@ html_code = """
         const canvas = document.getElementById('drawingCanvas');
         const ctx = canvas.getContext('2d');
         const clearBtn = document.getElementById('clearBtn');
-        // 저장/불러오기 버튼 관련 변수 제거
-        // const saveDrawingBtn = document.getElementById('saveDrawingBtn');
-        // const loadDrawingBtn = document.getElementById('loadDrawingBtn');
         const container = document.getElementById('whiteboard-container');
+        const controls = document.getElementById('whiteboard-controls');
 
 
         let drawing = false;
@@ -129,16 +132,18 @@ html_code = """
              // 부모 컨테이너 크기에 맞게 캔버스 크기 조정
              canvas.width = container.offsetWidth;
              // 컨트롤 영역 높이를 뺀 나머지 공간을 캔버스 높이로 사용
-             const controlsHeight = document.getElementById('whiteboard-controls').offsetHeight;
-             canvas.height = container.offsetHeight - controlsHeight;
+             // offsetHeight는 border, padding, scrollbar를 포함합니다.
+             const availableHeight = container.offsetHeight - controls.offsetHeight;
+             canvas.height = availableHeight;
 
              // Note: resizing canvas clears its content.
              // Since save/load is removed, no need to attempt re-drawing.
         };
 
         // 초기 로드 시 및 윈도우 크기 변경 시 캔버스 크기 조정
+        // 윈도우 로드 시 캔버스 크기 초기 설정
         window.onload = () => {
-            resizeCanvas(); // 캔버스 크기 초기 설정
+            resizeCanvas();
         };
         window.addEventListener('resize', resizeCanvas);
 
@@ -230,8 +235,7 @@ html_code = """
 # height 값을 더 크게 조정하여 세로 화면을 거의 채우도록 설정
 # 적절한 높이 값은 사용자의 화면 해상도에 따라 다를 수 있으나,
 # 여기서는 1500 픽셀로 설정하여 대부분의 화면에서 크게 보이도록 합니다.
-components.html(html_code, height=1500, scrolling=False) # height 값을 1500으로 증가
+components.html(html_code, height=1500, scrolling=False) # height 값을 1500으로 유지 또는 더 크게 조정 가능
 
 st.markdown("---")
 st.write("**참고:** 그림 저장 및 불러오기 기능은 제거되었습니다. '모두 지우기' 기능만 사용 가능합니다.")
-
