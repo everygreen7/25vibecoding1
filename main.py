@@ -7,9 +7,7 @@ st.title("✨ Streamlit 디지털 칠판")
 st.write("아래 영역에서 자유롭게 그림을 그리거나 내용을 작성하세요.")
 
 # HTML, CSS, JavaScript 코드를 파이썬 문자열로 정의
-# 이 코드는 이전에 제공된 디지털 칠판 HTML 코드와 동일합니다.
-# Streamlit 컴포넌트 내에서 실행되도록 약간의 조정이 필요할 수 있지만,
-# 기본적인 HTML/CSS/JS는 그대로 사용할 수 있습니다.
+# 그림 저장 및 불러오기 버튼 제거, 캔버스 높이 조정 로직 유지
 html_code = """
 <!DOCTYPE html>
 <html lang="ko">
@@ -78,11 +76,7 @@ html_code = """
         }
         #clearBtn:hover { background-color: #ff1a1a; }
 
-        #saveDrawingBtn, #loadDrawingBtn {
-             background-color: #007bff;
-             color: white;
-        }
-        #saveDrawingBtn:hover, #loadDrawingBtn:hover { background-color: #0056b3; }
+        /* 저장/불러오기 버튼 관련 스타일은 제거 */
 
         #drawingCanvas {
             flex-grow: 1; /* 남은 공간 모두 사용 */
@@ -108,9 +102,7 @@ html_code = """
     <div id="whiteboard-container">
         <div id="whiteboard-controls">
             <button id="clearBtn"><i class="fas fa-eraser"></i> 모두 지우기</button>
-            <button id="saveDrawingBtn"><i class="fas fa-save"></i> 그림 저장 (브라우저)</button>
-            <button id="loadDrawingBtn"><i class="fas fa-upload"></i> 그림 불러오기 (브라우저)</button>
-             </div>
+            </div>
         <canvas id="drawingCanvas"></canvas>
     </div>
 
@@ -122,8 +114,9 @@ html_code = """
         const canvas = document.getElementById('drawingCanvas');
         const ctx = canvas.getContext('2d');
         const clearBtn = document.getElementById('clearBtn');
-        const saveDrawingBtn = document.getElementById('saveDrawingBtn');
-        const loadDrawingBtn = document.getElementById('loadDrawingBtn');
+        // 저장/불러오기 버튼 관련 변수 제거
+        // const saveDrawingBtn = document.getElementById('saveDrawingBtn');
+        // const loadDrawingBtn = document.getElementById('loadDrawingBtn');
         const container = document.getElementById('whiteboard-container');
 
 
@@ -139,32 +132,13 @@ html_code = """
              const controlsHeight = document.getElementById('whiteboard-controls').offsetHeight;
              canvas.height = container.offsetHeight - controlsHeight;
 
-
-             // Note: resizing canvas clears its content. Need to re-draw if state exists.
-             // For simplicity, we will attempt to reload the drawing after resize if one exists.
-             const savedDrawing = localStorage.getItem('savedDrawing');
-             if (savedDrawing) {
-                 const img = new Image();
-                 img.onload = () => {
-                     // 기존 내용을 지우고 저장된 그림을 현재 크기에 맞게 다시 그립니다.
-                     ctx.clearRect(0, 0, canvas.width, canvas.height);
-                     // 저장된 이미지의 비율을 유지하면서 현재 캔버스에 맞게 그립니다.
-                     const hRatio = canvas.width / img.width;
-                     const vRatio = canvas.height / img.height;
-                     const ratio = Math.min(hRatio, vRatio);
-                     const centerShift_x = (canvas.width - img.width * ratio) / 2;
-                     const centerShift_y = (canvas.height - img.height * ratio) / 2;
-                     ctx.drawImage(img, 0, 0, img.width, img.height,
-                                   centerShift_x, centerShift_y, img.width * ratio, img.height * ratio);
-                 };
-                 img.src = savedDrawing;
-             }
+             // Note: resizing canvas clears its content.
+             // Since save/load is removed, no need to attempt re-drawing.
         };
 
         // 초기 로드 시 및 윈도우 크기 변경 시 캔버스 크기 조정
-        // 윈도우 로드 시 캔버스 크기 조정 및 저장된 그림 불러오기 시도
         window.onload = () => {
-            resizeCanvas(); // 캔버스 크기 초기 설정 및 저장된 그림 불러오기 시도
+            resizeCanvas(); // 캔버스 크기 초기 설정
         };
         window.addEventListener('resize', resizeCanvas);
 
@@ -243,41 +217,7 @@ html_code = """
             ctx.clearRect(0, 0, canvas.width, canvas.height);
         });
 
-        // 그림 저장 (localStorage)
-        saveDrawingBtn.addEventListener('click', () => {
-            try {
-                const dataURL = canvas.toDataURL(); // 캔버스 내용을 Data URL 형식으로 가져옴
-                localStorage.setItem('savedDrawing', dataURL);
-                alert('그림이 브라우저에 저장되었습니다.');
-            } catch (e) {
-                alert('그림 저장 중 오류가 발생했습니다. 브라우저 저장 공간이 부족하거나 지원되지 않을 수 있습니다.');
-                console.error(e);
-            }
-        });
-
-        // 그림 불러오기 (localStorage)
-        loadDrawingBtn.addEventListener('click', () => {
-            const savedDrawing = localStorage.getItem('savedDrawing');
-            if (savedDrawing) {
-                const img = new Image();
-                img.onload = () => {
-                    // 캔버스 크기가 변경되었을 수 있으므로 불러온 이미지를 현재 캔버스 크기에 맞게 그립니다.
-                    // 비율 유지는 필요에 따라 조절해야 합니다. 여기서는 간단히 캔버스 전체를 채우도록 합니다.
-                    ctx.clearRect(0, 0, canvas.width, canvas.height); // 기존 내용 지우고
-                     const hRatio = canvas.width / img.width;
-                     const vRatio = canvas.height / img.height;
-                     const ratio = Math.min(hRatio, vRatio);
-                     const centerShift_x = (canvas.width - img.width * ratio) / 2;
-                     const centerShift_y = (canvas.height - img.height * ratio) / 2;
-                     ctx.drawImage(img, 0, 0, img.width, img.height,
-                                   centerShift_x, centerShift_y, img.width * ratio, img.height * ratio);
-                };
-                img.src = savedDrawing;
-                 alert('그림을 브라우저에서 불러왔습니다.');
-            } else {
-                alert('저장된 그림이 없습니다.');
-            }
-        });
+        // 저장/불러오기 기능 관련 JavaScript 코드 제거
 
         // JavaScript 코드 끝
     </script>
@@ -287,10 +227,11 @@ html_code = """
 """
 
 # Streamlit 컴포넌트로 HTML 코드 렌더링
-# height 값을 조정하여 칠판 영역의 높이를 설정할 수 있습니다.
-# scrolling=True로 설정하면 칠판 영역이 넘칠 때 스크롤바가 생깁니다.
-components.html(html_code, height=1000, scrolling=False) # height 값을 1000으로 증가
+# height 값을 더 크게 조정하여 세로 화면을 거의 채우도록 설정
+# 적절한 높이 값은 사용자의 화면 해상도에 따라 다를 수 있으나,
+# 여기서는 1200 픽셀로 설정하여 대부분의 화면에서 크게 보이도록 합니다.
+components.html(html_code, height=1200, scrolling=False) # height 값을 1200으로 증가
 
 st.markdown("---")
-st.write("**참고:** 그림 저장 및 불러오기 기능은 현재 브라우저의 로컬 저장소(localStorage)를 사용합니다. 다른 브라우저나 기기에서는 공유되지 않습니다.")
+st.write("**참고:** 그림 저장 및 불러오기 기능은 제거되었습니다. '모두 지우기' 기능만 사용 가능합니다.")
 
