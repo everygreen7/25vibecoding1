@@ -289,7 +289,7 @@ html_code = """
 # Streamlit 컴포넌트로 HTML 코드 렌더링
 # height 값을 조정하여 칠판 영역의 높이를 설정할 수 있습니다.
 # scrolling=True로 설정하면 칠판 영역이 넘칠 때 스크롤바가 생깁니다.
-components.html(html_code, height=600, scrolling=False)
+components.html(html_code, height=800, scrolling=False) # height 값을 800으로 증가
 
 st.markdown("---")
 st.write("**참고:** 그림 저장 및 불러오기 기능은 현재 브라우저의 로컬 저장소(localStorage)를 사용합니다. 다른 브라우저나 기기에서는 공유되지 않습니다.")
