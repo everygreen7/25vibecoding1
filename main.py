@@ -26,7 +26,7 @@ def add_bg_from_local(image_file):
         st.warning(f"배경 이미지 설정 중 오류 발생: {e}")
 
 
-# --- 커스텀 CSS 추가: 입력 필드 크기 조절 ---
+# --- 커스텀 CSS 추가: 입력 필드 크기 조절 및 타이머 디스플레이 스타일 ---
 st.markdown("""
 <style>
 /* Streamlit 숫자 입력 필드의 입력 부분 (input 태그)을 타겟팅 */
@@ -57,7 +57,35 @@ div[data-testid="stEmpty"] > div {
     margin-top: 20px;
 }
 
+/* 타이머 종료 메시지 스타일 */
+.timer-end-message {
+    text-align: center;
+    font-size: 3em;
+    font-weight: bold;
+    color: #28B463; /* Green color for completion */
+    text-shadow: 2px 2px 8px rgba(0,0,0,0.3);
+    margin-top: 20px;
+    animation: pulse 1s infinite; /* 펄스 애니메이션 추가 */
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+}
+
 </style>
+""", unsafe_allow_html=True)
+
+# --- HTML 오디오 요소 추가 (타이머 종료 시 재생될 소리) ---
+# 여기에 실제 소리 파일의 URL을 넣어주세요. (예: .mp3, .wav 파일)
+# 공개적으로 접근 가능한 소리 파일 URL을 사용해야 합니다.
+# 예시: https://www.soundjay.com/button/sounds/button-1.mp3
+# YOUR_SOUND_URL 부분을 실제 URL로 변경하거나, 이 부분을 주석 처리하면 소리 기능은 비활성화됩니다.
+SOUND_URL = "https://www.soundjay.com/button/sounds/button-1.mp3" # <-- 여기에 소리 파일 URL 입력
+
+st.markdown(f"""
+<audio id="timer-end-sound" src="{SOUND_URL}" preload="auto"></audio>
 """, unsafe_allow_html=True)
 
 
@@ -113,6 +141,8 @@ if 'total_duration' not in st.session_state:
      st.session_state.total_duration = 0
 if 'last_remaining' not in st.session_state: # 중지 후 남은 시간 저장을 위한 변수
      st.session_state.last_remaining = 0
+if 'timer_completed' not in st.session_state: # 타이머 완료 상태 저장
+    st.session_state.timer_completed = False
 
 
 start_button = st.button("타이머 시작")
@@ -122,8 +152,11 @@ reset_button = st.button("타이머 초기화")
 # 타이머 디스플레이를 위한 placeholder
 timer_placeholder = st.empty()
 
-# 초기 또는 리셋 상태일 때 디스플레이
-if not st.session_state.timer_running and st.session_state.last_remaining == 0:
+# 초기, 중지, 리셋, 완료 상태일 때 디스플레이
+if st.session_state.timer_completed:
+    # 타이머 완료 시 메시지 표시
+    timer_placeholder.markdown('<div class="timer-end-message">🎉 시간 종료! 🎉</div>', unsafe_allow_html=True)
+elif not st.session_state.timer_running and st.session_state.last_remaining == 0:
      timer_placeholder.markdown("## ⏳ 00:00:00", unsafe_allow_html=True)
 elif not st.session_state.timer_running and st.session_state.last_remaining > 0:
     # 중지 상태일 때 마지막 남은 시간 표시
@@ -160,6 +193,7 @@ if start_button:
             st.session_state.end_time = st.session_state.start_time + st.session_state.total_duration
             st.session_state.timer_running = True
             st.session_state.last_remaining = 0 # 다시 시작했으므로 남은 시간 초기화
+            st.session_state.timer_completed = False # 타이머 시작 시 완료 상태 초기화
             st.rerun() # 타이머 시작 후 바로 UI 업데이트를 위해 rerun
 
         else:
@@ -177,6 +211,7 @@ if stop_button:
             remaining = max(0, st.session_state.total_duration - elapsed)
             st.session_state.last_remaining = remaining # 남은 시간을 저장
         st.session_state.start_time = None # 시작 시간 초기화
+        st.session_state.timer_completed = False # 중지 시 완료 상태 초기화
         st.rerun() # 중지 후 UI 업데이트를 위해 rerun
     else:
         st.info("타이머가 실행 중이 아닙니다.")
@@ -188,6 +223,7 @@ if reset_button:
     st.session_state.end_time = None
     st.session_state.total_duration = 0
     st.session_state.last_remaining = 0
+    st.session_state.timer_completed = False # 리셋 시 완료 상태 초기화
     # 입력 필드 값 초기화를 위한 세션 상태 변수 설정
     st.session_state.hours_input_value = 0
     st.session_state.minutes_input_value = 0
@@ -223,12 +259,26 @@ if st.session_state.timer_running and st.session_state.end_time is not None:
         timer_placeholder.markdown(timer_html, unsafe_allow_html=True)
         time.sleep(0.1) # 0.1초마다 업데이트하여 부드럽게 보이게 함
 
-    # 타이머 종료 시 메시지
+    # 타이머 종료 시 로직
     if st.session_state.timer_running: # 종료 시에도 timer_running이 True인 경우 (자연 종료)
         st.session_state.timer_running = False
         st.session_state.last_remaining = 0 # 종료되었으므로 남은 시간 없음
-        timer_placeholder.markdown("## 🎉 시간 종료! 🎉", unsafe_allow_html=True)
+        st.session_state.timer_completed = True # 타이머 완료 상태 설정
+
+        # 타이머 종료 메시지 표시 및 풍선 효과
+        timer_placeholder.markdown('<div class="timer-end-message">🎉 시간 종료! 🎉</div>', unsafe_allow_html=True)
         st.balloons() # 풍선 효과 추가!
+
+        # 소리 재생을 위한 JavaScript 실행
+        st.markdown("""
+        <script>
+        var audio = document.getElementById('timer-end-sound');
+        if (audio) {
+            audio.play();
+        }
+        </script>
+        """, unsafe_allow_html=True)
+
         st.rerun() # 종료 후 상태 변경 반영
 
 
@@ -238,3 +288,4 @@ st.write("✨ 즐거운 시간 보내세요! ✨")
 
 # 배경 이미지 사용 시, 'your_background_image.jpg' 파일을 이 스크립트와 같은 폴더에 넣어주세요.
 # 또는 add_bg_from_local 함수 호출 부분을 주석 처리하거나 삭제하세요.
+# 소리 재생을 원하지 않으면 HTML 오디오 요소 추가 부분을 주석 처리하거나 삭제하세요.
