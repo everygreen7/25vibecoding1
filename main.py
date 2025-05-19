@@ -35,11 +35,13 @@ html_code = """
             overflow: hidden; /* 스크롤 방지 */
             width: 100%;
             height: 100%; /* Ensure body takes full height of the component iframe */
+            display: flex; /* Use flexbox for body to manage container height */
+            flex-direction: column;
         }
 
         #whiteboard-container {
             width: 100%;
-            height: 100%; /* 부모(body) 높이에 맞춤 */
+            flex-grow: 1; /* Allow container to grow and fill body height */
             display: flex;
             flex-direction: column;
             background-color: #fff; /* 칠판 배경색 */
@@ -82,12 +84,13 @@ html_code = """
         /* 저장/불러오기 버튼 관련 스타일은 제거 */
 
         #drawingCanvas {
-            flex-grow: 1; /* 남은 공간 모두 사용 */
+            flex-grow: 1; /* Allow canvas to grow and fill remaining space */
             flex-shrink: 1; /* Allow canvas to shrink */
             flex-basis: auto; /* Default basis */
             background-color: #fff; /* 칠판 배경색 */
             cursor: crosshair;
             /* 캔버스 자체의 너비/높이는 JavaScript로 설정 */
+            display: block; /* Ensure canvas is a block element */
         }
 
         /* 모바일 반응형 조정 */
@@ -129,12 +132,10 @@ html_code = """
 
         // 캔버스 크기 조정 (반응형)
         const resizeCanvas = () => {
-             // 부모 컨테이너 크기에 맞게 캔버스 크기 조정
-             canvas.width = container.offsetWidth;
-             // 컨트롤 영역 높이를 뺀 나머지 공간을 캔버스 높이로 사용
-             // offsetHeight는 border, padding, scrollbar를 포함합니다.
-             const availableHeight = container.offsetHeight - controls.offsetHeight;
-             canvas.height = availableHeight;
+             // Set the canvas's internal drawing buffer size to match its *actual* display size
+             // as determined by CSS Flexbox. This prevents drawing distortion.
+             canvas.width = canvas.offsetWidth;
+             canvas.height = canvas.offsetHeight;
 
              // Note: resizing canvas clears its content.
              // Since save/load is removed, no need to attempt re-drawing.
@@ -167,7 +168,11 @@ html_code = """
                  return; // 지원하지 않는 이벤트 타입
             }
 
-            [lastX, lastY] = [clientX, clientY];
+            // Adjust coordinates for potential CSS scaling if needed (though Flexbox should handle this)
+            // const scaleX = canvas.width / rect.width;
+            // const scaleY = canvas.height / rect.height;
+            // [lastX, lastY] = [(clientX - rect.left) * scaleX, (clientY - rect.top) * scaleY];
+             [lastX, lastY] = [clientX, clientY];
         }
 
         // 드로잉 중 (마우스 및 터치)
@@ -188,6 +193,14 @@ html_code = """
                  return; // 지원하지 않는 이벤트 타입
             }
 
+            // Adjust coordinates for potential CSS scaling if needed
+            // const scaleX = canvas.width / rect.width;
+            // const scaleY = canvas.height / rect.height;
+            // const currentX = (clientX - rect.left) * scaleX;
+            // const currentY = (clientY - rect.top) * scaleY;
+             const currentX = clientX;
+             const currentY = clientY;
+
 
             ctx.strokeStyle = '#000'; // 검은색
             ctx.lineJoin = 'round';
@@ -196,9 +209,9 @@ html_code = """
 
             ctx.beginPath();
             ctx.moveTo(lastX, lastY);
-            ctx.lineTo(clientX, clientY);
+            ctx.lineTo(currentX, currentY);
             ctx.stroke();
-            [lastX, lastY] = [clientX, clientY];
+            [lastX, lastY] = [currentX, currentY];
         }
 
         // 드로잉 중지 (마우스 및 터치)
