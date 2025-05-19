@@ -1,254 +1,237 @@
 import streamlit as st
-import streamlit.components.v1 as components
+from streamlit_drawable_canvas import st_canvas
+import pandas as pd
+import json
+import time
+from datetime import datetime, timedelta
 
-# Streamlit 앱 설정
-st.set_page_config(layout="wide") # 레이아웃을 넓게 설정
-st.title("✨ Streamlit 디지털 칠판")
-st.write("아래 영역에서 자유롭게 그림을 그리거나 내용을 작성하세요.")
+# 페이지 설정
+st.set_page_config(layout="wide", page_title="디지털 칠판")
 
-# HTML, CSS, JavaScript 코드를 파이썬 문자열로 정의
-# 그림 저장 및 불러오기 버튼 제거, 캔버스 높이 조정 로직 수정
-html_code = """
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>디지털 칠판 컴포넌트</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <style>
-        /* 기본 스타일 및 초기화 */
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
+# --- 타이머 기능 ---
+st.sidebar.header("타이머 설정")
 
-        body {
-            font-family: 'Arial', sans-serif;
-            line-height: 1.6;
-            background-color: #fff; /* Streamlit 배경색과 맞추거나 투명하게 */
-            color: #333;
-            /* Streamlit에 임베드될 때는 body 패딩이나 마진을 제거하는 것이 좋습니다. */
-            padding: 0;
-            margin: 0;
-            overflow: hidden; /* 스크롤 방지 */
-            width: 100%;
-            height: 100%; /* Ensure body takes full height of the component iframe */
-            display: flex; /* Use flexbox for body to manage container height */
-            flex-direction: column;
-        }
+# 세션 상태 초기화
+if 'timer_state' not in st.session_state:
+    st.session_state.timer_state = 'stopped' # 'stopped', 'running', 'paused', 'finished'
+if 'start_time' not in st.session_state:
+    st.session_state.start_time = None
+if 'pause_time' not in st.session_state:
+    st.session_state.pause_time = None
+if 'total_seconds' not in st.session_state:
+    st.session_state.total_seconds = 0
+if 'time_left' not in st.session_state:
+    st.session_state.time_left = 0
+if 'input_minutes' not in st.session_state:
+    st.session_state.input_minutes = 0
+if 'input_seconds' not in st.session_state:
+    st.session_state.input_seconds = 0
 
-        #whiteboard-container {
-            width: 100%;
-            flex-grow: 1; /* Allow container to grow and fill body height */
-            display: flex;
-            flex-direction: column;
-            background-color: #fff; /* 칠판 배경색 */
-            border-radius: 8px; /* Streamlit 컨테이너와 일관성 유지 */
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); /* 그림자 */
-            overflow: hidden; /* 내용 넘침 방지 */
-        }
+# 시간 입력
+col_min, col_sec = st.sidebar.columns(2)
+with col_min:
+    minutes = st.number_input("분", min_value=0, max_value=59, value=st.session_state.input_minutes, key="min_input")
+with col_sec:
+    seconds = st.number_input("초", min_value=0, max_value=59, value=st.session_state.input_seconds, key="sec_input")
 
-        #whiteboard-controls {
-            padding: 10px;
-            background-color: #f0f2f6; /* Streamlit 사이드바/컨트롤 색상과 유사하게 */
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            align-items: center;
-            justify-content: center; /* 버튼 중앙 정렬 */
-            border-bottom: 1px solid #eee;
-            flex-shrink: 0; /* Prevent controls from shrinking */
-        }
+# 입력 값 업데이트 (세션 상태에 저장하여 새로고침 시 유지)
+st.session_state.input_minutes = minutes
+st.session_state.input_seconds = seconds
 
-        #whiteboard-controls button {
-             padding: 8px 15px;
-             border: none;
-             border-radius: 4px;
-             cursor: pointer;
-             font-size: 0.9rem; /* 글씨 크기 약간 줄임 */
-             display: flex;
-             align-items: center;
-             gap: 5px;
-             transition: background-color 0.2s ease;
-             font-weight: bold;
-        }
+# 총 시간 계산
+initial_total_seconds = minutes * 60 + seconds
 
-        #clearBtn {
-            background-color: #ff4d4d;
-            color: white;
-        }
-        #clearBtn:hover { background-color: #ff1a1a; }
-
-        /* 저장/불러오기 버튼 관련 스타일은 제거 */
-
-        #drawingCanvas {
-            flex-grow: 1; /* Allow canvas to grow and fill remaining space */
-            flex-shrink: 1; /* Allow canvas to shrink */
-            flex-basis: auto; /* Default basis */
-            background-color: #fff; /* 칠판 배경색 */
-            cursor: crosshair;
-            /* 캔버스 자체의 너비/높이는 JavaScript로 설정 */
-            display: block; /* Ensure canvas is a block element */
-        }
-
-        /* 모바일 반응형 조정 */
-        @media (max-width: 768px) {
-            #whiteboard-controls {
-                 flex-direction: column; /* 모바일에서 버튼 세로 정렬 */
-                 align-items: stretch; /* 버튼 너비 맞춤 */
-            }
-             #whiteboard-controls button {
-                 justify-content: center; /* 모바일 버튼 내용 중앙 정렬 */
-             }
-        }
-    </style>
-</head>
-<body>
-
-    <div id="whiteboard-container">
-        <div id="whiteboard-controls">
-            <button id="clearBtn"><i class="fas fa-eraser"></i> 모두 지우기</button>
-        </div>
-        <canvas id="drawingCanvas"></canvas>
-    </div>
+# 타이머 상태 업데이트 함수
+def update_timer_state(state):
+    st.session_state.timer_state = state
+    if state == 'running':
+        if st.session_state.pause_time is not None: # 일시정지 후 재개
+            paused_duration = datetime.now() - st.session_state.pause_time
+            st.session_state.start_time += paused_duration # 시작 시간을 일시정지 시간만큼 미룸
+            st.session_state.pause_time = None
+        elif st.session_state.start_time is None: # 처음 시작
+             st.session_state.start_time = datetime.now()
+             st.session_state.total_seconds = initial_total_seconds # 시작 시 총 시간 저장
+             st.session_state.time_left = st.session_state.total_seconds
+    elif state == 'paused':
+        st.session_state.pause_time = datetime.now()
+    elif state == 'stopped':
+        st.session_state.start_time = None
+        st.session_state.pause_time = None
+        st.session_state.total_seconds = 0
+        st.session_state.time_left = 0
+        st.session_state.input_minutes = 0
+        st.session_state.input_seconds = 0
+    elif state == 'finished':
+        st.session_state.start_time = None
+        st.session_state.pause_time = None
+        st.session_state.total_seconds = 0
+        st.session_state.time_left = 0
 
 
-    <script>
-        // JavaScript 코드 시작
+# 타이머 제어 버튼
+col_start, col_pause, col_reset = st.sidebar.columns(3)
 
-        // --- 디지털 칠판 기능 ---
-        const canvas = document.getElementById('drawingCanvas');
-        const ctx = canvas.getContext('2d');
-        const clearBtn = document.getElementById('clearBtn');
-        const container = document.getElementById('whiteboard-container');
-        const controls = document.getElementById('whiteboard-controls');
+with col_start:
+    if st.button("시작", disabled=st.session_state.timer_state == 'running' or initial_total_seconds == 0):
+        update_timer_state('running')
+        st.rerun() # 상태 변경 후 새로고침하여 타이머 표시 업데이트
 
+with col_pause:
+    if st.button("일시정지", disabled=st.session_state.timer_state != 'running'):
+        update_timer_state('paused')
+        st.rerun() # 상태 변경 후 새로고침
 
-        let drawing = false;
-        let lastX = 0;
-        let lastY = 0;
+with col_reset:
+    if st.button("재설정", disabled=st.session_state.timer_state == 'stopped'):
+        update_timer_state('stopped')
+        st.rerun() # 상태 변경 후 새로고침
 
-        // 캔버스 크기 조정 (반응형)
-        const resizeCanvas = () => {
-             // Set the canvas's internal drawing buffer size to match its *actual* display size
-             // as determined by CSS Flexbox. This prevents drawing distortion.
-             canvas.width = canvas.offsetWidth;
-             canvas.height = canvas.offsetHeight;
+# 타이머 표시 영역 (메인 화면)
+timer_display_area = st.empty()
 
-             // Note: resizing canvas clears its content.
-             // Since save/load is removed, no need to attempt re-drawing.
-        };
+# 타이머 로직 및 표시
+if st.session_state.timer_state == 'running':
+    elapsed_time = datetime.now() - st.session_state.start_time
+    st.session_state.time_left = max(0, st.session_state.total_seconds - int(elapsed_time.total_seconds()))
 
-        // 초기 로드 시 및 윈도우 크기 변경 시 캔버스 크기 조정
-        // 윈도우 로드 시 캔버스 크기 초기 설정
-        window.onload = () => {
-            resizeCanvas();
-        };
-        window.addEventListener('resize', resizeCanvas);
-
-
-        // 드로잉 시작 (마우스 및 터치)
-        function startDrawing(e) {
-            drawing = true;
-            // 캔버스 기준 좌표 계산
-            const rect = canvas.getBoundingClientRect();
-            let clientX, clientY;
-
-            if (e.type.includes('mouse')) {
-                clientX = e.offsetX;
-                clientY = e.offsetY;
-            } else if (e.type.includes('touch')) {
-                 // 터치 좌표 계산
-                clientX = e.touches[0].clientX - rect.left;
-                clientY = e.touches[0].clientY - rect.top;
-                e.preventDefault(); // 터치 스크롤 방지
-            } else {
-                 return; // 지원하지 않는 이벤트 타입
-            }
-
-            // Adjust coordinates for potential CSS scaling if needed (though Flexbox should handle this)
-            // const scaleX = canvas.width / rect.width;
-            // const scaleY = canvas.height / rect.height;
-            // [lastX, lastY] = [(clientX - rect.left) * scaleX, (clientY - rect.top) * scaleY];
-             [lastX, lastY] = [clientX, clientY];
-        }
-
-        // 드로잉 중 (마우스 및 터치)
-        function draw(e) {
-            if (!drawing) return;
-            const rect = canvas.getBoundingClientRect();
-            let clientX, clientY;
-
-            if (e.type.includes('mouse')) {
-                clientX = e.offsetX;
-                clientY = e.offsetY;
-            } else if (e.type.includes('touch')) {
-                 // 터치 좌표 계산
-                clientX = e.touches[0].clientX - rect.left;
-                clientY = e.touches[0].clientY - rect.top;
-                e.preventDefault(); // 터치 스크롤 방지
-            } else {
-                 return; // 지원하지 않는 이벤트 타입
-            }
-
-            // Adjust coordinates for potential CSS scaling if needed
-            // const scaleX = canvas.width / rect.width;
-            // const scaleY = canvas.height / rect.height;
-            // const currentX = (clientX - rect.left) * scaleX;
-            // const currentY = (clientY - rect.top) * scaleY;
-             const currentX = clientX;
-             const currentY = clientY;
+    if st.session_state.time_left > 0:
+        mins, secs = divmod(st.session_state.time_left, 60)
+        timer_display_area.markdown(f"<h1 style='text-align: center; color: green;'>{mins:02d}:{secs:02d}</h1>", unsafe_allow_html=True)
+        # 1초마다 새로고침 (실시간 카운트다운처럼 보이게 함)
+        time.sleep(1)
+        st.rerun()
+    else:
+        update_timer_state('finished')
+        timer_display_area.markdown("<h1 style='text-align: center; color: red;'>시간 종료!</h1>", unsafe_allow_html=True)
+        st.balloons() # 시간 종료 시 알림 효과
+elif st.session_state.timer_state == 'paused':
+    mins, secs = divmod(st.session_state.time_left, 60)
+    timer_display_area.markdown(f"<h1 style='text-align: center; color: orange;'>{mins:02d}:{secs:02d} (일시정지)</h1>", unsafe_allow_html=True)
+elif st.session_state.timer_state == 'finished':
+     timer_display_area.markdown("<h1 style='text-align: center; color: red;'>시간 종료!</h1>", unsafe_allow_html=True)
+else: # stopped
+    mins, secs = divmod(initial_total_seconds, 60)
+    timer_display_area.markdown(f"<h1 style='text-align: center; color: gray;'>{mins:02d}:{secs:02d}</h1>", unsafe_allow_html=True)
 
 
-            ctx.strokeStyle = '#000'; // 검은색
-            ctx.lineJoin = 'round';
-            ctx.lineCap = 'round';
-            ctx.lineWidth = 5; // 선 굵기
+st.markdown("---") # 구분선
 
-            ctx.beginPath();
-            ctx.moveTo(lastX, lastY);
-            ctx.lineTo(currentX, currentY);
-            ctx.stroke();
-            [lastX, lastY] = [currentX, currentY];
-        }
+# --- 디지털 칠판 기능 ---
+st.header("디지털 칠판")
 
-        // 드로잉 중지 (마우스 및 터치)
-        function stopDrawing() {
-            drawing = false;
-        }
+# 캔버스 설정
+canvas_width = 800
+canvas_height = 600
 
-        // 이벤트 리스너 연결 (마우스 및 터치)
-        canvas.addEventListener('mousedown', startDrawing);
-        canvas.addEventListener('mousemove', draw);
-        canvas.addEventListener('mouseup', stopDrawing);
-        canvas.addEventListener('mouseout', stopDrawing); // 캔버스 밖으로 나갔을 때 중지
+# 그리기 모드 및 색상, 두께 설정 (사이드바)
+st.sidebar.header("칠판 설정")
+drawing_mode = st.sidebar.selectbox(
+    "그리기 모드", ("freedraw", "line", "rect", "circle", "transform", "polygon", "point", "text"), index=0
+)
+stroke_width = st.sidebar.slider("펜 두께", 1, 25, 3)
+stroke_color = st.sidebar.color_picker("펜 색상", "#000000")
+bg_color = st.sidebar.color_picker("배경 색상", "#FFFFFF")
+# bg_image = st.sidebar.file_uploader("배경 이미지 업로드", type=["png", "jpg"]) # 배경 이미지 기능 (선택 사항)
 
-        canvas.addEventListener('touchstart', startDrawing);
-        canvas.addEventListener('touchmove', draw);
-        canvas.addEventListener('touchend', stopDrawing);
-        canvas.addEventListener('touchcancel', stopDrawing);
+# 캔버스 컴포넌트
+canvas_result = st_canvas(
+    fill_color="rgba(255, 165, 0, 0.3)", # 채우기 색상 (도형용)
+    stroke_width=stroke_width,
+    stroke_color=stroke_color,
+    background_color=bg_color,
+    # background_image=bg_image, # 배경 이미지 설정
+    height=canvas_height,
+    width=canvas_width,
+    drawing_mode=drawing_mode,
+    point_display_mode="auto",
+    key="canvas",
+)
 
-        // 모두 지우기 기능
-        clearBtn.addEventListener('click', () => {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-        });
+# 그린 내용 지우기
+if st.button("모두 지우기"):
+    # 캔버스 상태를 초기화하는 간단한 방법은 페이지 새로고침입니다.
+    # 더 나은 방법은 캔버스 컴포넌트의 key를 변경하여 강제로 리렌더링하는 것입니다.
+    st.session_state["canvas"] = st.session_state["canvas"] + 1 # key 값을 변경
+    st.rerun() # 페이지 새로고침
 
-        // 저장/불러오기 기능 관련 JavaScript 코드 제거
+# 그린 내용 저장 및 불러오기
+st.sidebar.header("저장/불러오기")
 
-        // JavaScript 코드 끝
-    </script>
+# 그린 내용 (JSON 데이터) 가져오기
+if canvas_result.json_data is not None:
+    objects = pd.json_normalize(canvas_result.json_data["objects"])
+    # st.subheader("그린 내용 (JSON 데이터)")
+    # st.write(objects) # 디버깅용
 
-</body>
-</html>
-"""
+    # JSON 파일로 저장
+    canvas_json_data = json.dumps(canvas_result.json_data)
+    st.sidebar.download_button(
+        label="그린 내용 JSON으로 저장",
+        data=canvas_json_data,
+        file_name="digital_whiteboard.json",
+        mime="application/json"
+    )
 
-# Streamlit 컴포넌트로 HTML 코드 렌더링
-# height 값을 더 크게 조정하여 세로 화면을 거의 채우도록 설정
-# 적절한 높이 값은 사용자의 화면 해상도에 따라 다를 수 있으나,
-# 여기서는 1500 픽셀로 설정하여 대부분의 화면에서 크게 보이도록 합니다.
-components.html(html_code, height=1500, scrolling=False) # height 값을 1500으로 유지 또는 더 크게 조정 가능
+# JSON 파일 불러오기
+uploaded_file = st.sidebar.file_uploader("그린 내용 JSON 불러오기", type=["json"])
+if uploaded_file is not None:
+    loaded_json_data = json.load(uploaded_file)
+    # 불러온 데이터를 캔버스에 적용하는 기능은 streamlit-drawable-canvas 컴포넌트 자체에서 지원해야 합니다.
+    # 현재 버전(또는 사용 방식)에서는 직접 로드된 JSON 데이터를 캔버스에 주입하는 기능이 제한적일 수 있습니다.
+    # 일반적으로는 컴포넌트 초기화 시 initial_drawing 인자로 전달하지만,
+    # 파일 업로드 후 동적으로 변경하는 것은 추가적인 로직이나 컴포넌트 지원이 필요합니다.
+    # 임시 방편으로, 불러온 데이터를 확인하고 사용자에게 다시 그리도록 안내하거나,
+    # 컴포넌트 업데이트를 통해 이 기능을 구현해야 합니다.
+    st.sidebar.warning("불러온 JSON 데이터를 캔버스에 자동으로 적용하는 기능은 현재 제한적입니다. 파일을 확인해주세요.")
+    st.sidebar.json(loaded_json_data) # 불러온 데이터 확인용
 
-st.markdown("---")
-st.write("**참고:** 그림 저장 및 불러오기 기능은 제거되었습니다. '모두 지우기' 기능만 사용 가능합니다.")
+# 그린 내용을 이미지로 저장 (PNG)
+if canvas_result.image_data is not None:
+    st.sidebar.download_button(
+        label="그린 내용 PNG로 저장",
+        data=canvas_result.image_data,
+        file_name="digital_whiteboard.png",
+        mime="image/png"
+    )
+
+# --- 깔끔한 스타일 적용 (선택 사항) ---
+# Streamlit은 기본적으로 깔끔한 스타일을 제공하지만, 추가적인 CSS를 적용할 수 있습니다.
+st.markdown("""
+<style>
+    /* 전체 페이지 여백 줄이기 */
+    .css-18e3th9, .css-1d3z3ef {
+        padding-top: 1rem;
+        padding-bottom: 1rem;
+        padding-left: 2rem;
+        padding-right: 2rem;
+    }
+    /* 사이드바 너비 조절 */
+    .css-1lcbmhc, .css-1ajxrlb {
+        width: 300px;
+    }
+    /* 버튼 스타일 */
+    div.stButton > button {
+        width: 100%;
+        border-radius: 5px;
+    }
+    /* 숫자 입력 필드 너비 조절 */
+    .stNumberInput {
+        width: 100%;
+    }
+    /* 타이머 표시 중앙 정렬 */
+    h1 {
+        text-align: center;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# --- 텍스트 추가 기능 설명 ---
+st.markdown("""
+**텍스트 추가 방법:**
+1. 왼쪽 사이드바의 '그리기 모드'를 'text'로 선택합니다.
+2. 캔버스에서 텍스트를 추가하고 싶은 위치를 클릭합니다.
+3. 텍버스에 나타난 텍스트 상자에 원하는 내용을 입력합니다.
+4. 텍스트 상자 바깥을 클릭하면 입력이 완료됩니다.
+5. 'transform' 모드를 사용하여 텍스트의 위치나 크기를 조절할 수 있습니다.
+""")
