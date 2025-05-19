@@ -20,6 +20,31 @@ def add_bg_from_local(image_file):
     unsafe_allow_html=True
     )
 
+# --- 커스텀 CSS 추가: 입력 필드 크기 조절 ---
+st.markdown("""
+<style>
+/* Streamlit 숫자 입력 필드의 입력 부분 (input 태그)을 타겟팅 */
+div[data-testid="stNumberInput"] input {
+    font-size: 1.5em !important; /* 글자 크기 키우기 */
+    padding: 10px !important; /* 패딩 추가하여 필드 자체 크기 키우기 */
+    height: auto !important; /* 높이 자동 조절 */
+}
+
+/* 숫자 입력 필드의 레이블 (label 태그) 크기 조절 */
+div[data-testid="stNumberInput"] label {
+    font-size: 1.2em !important; /* 레이블 글자 크기 키우기 */
+    font-weight: bold !important;
+}
+
+/* 전체 앱의 글꼴 및 기본 스타일 */
+html, body, [class*="st"] {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+
 # --- 웹 앱 타이틀 및 설명 ---
 st.title("✨ 화려한 카운트다운 타이머 ✨")
 st.markdown("""
@@ -38,11 +63,11 @@ st.header("⏰ 시간 설정")
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    hours = st.number_input("시간", min_value=0, max_value=23, value=0, step=1)
+    hours = st.number_input("시간", min_value=0, max_value=23, value=0, step=1, key='hours_input') # key 추가
 with col2:
-    minutes = st.number_input("분", min_value=0, max_value=59, value=0, step=1)
+    minutes = st.number_input("분", min_value=0, max_value=59, value=0, step=1, key='minutes_input') # key 추가
 with col3:
-    seconds = st.number_input("초", min_value=0, max_value=59, value=0, step=1)
+    seconds = st.number_input("초", min_value=0, max_value=59, value=0, step=1, key='seconds_input') # key 추가
 
 total_seconds = hours * 3600 + minutes * 60 + seconds
 
@@ -58,6 +83,9 @@ if 'end_time' not in st.session_state:
     st.session_state.end_time = None
 if 'total_duration' not in st.session_state:
      st.session_state.total_duration = 0
+if 'last_remaining' not in st.session_state: # 중지 후 남은 시간 저장을 위한 변수
+     st.session_state.last_remaining = 0
+
 
 start_button = st.button("타이머 시작")
 stop_button = st.button("타이머 중지")
@@ -66,29 +94,78 @@ reset_button = st.button("타이머 초기화")
 # 타이머 디스플레이를 위한 placeholder
 timer_placeholder = st.empty()
 
-if start_button and total_seconds > 0:
-    st.session_state.timer_running = True
-    st.session_state.total_duration = total_seconds
-    st.session_state.start_time = time.time()
-    st.session_state.end_time = st.session_state.start_time + total_seconds
-elif start_button and total_seconds == 0:
-    st.warning("시간을 설정해주세요!")
+# 초기 또는 리셋 상태일 때 디스플레이
+if not st.session_state.timer_running and st.session_state.last_remaining == 0:
+     timer_placeholder.markdown("## ⏳ 00:00:00")
+elif not st.session_state.timer_running and st.session_state.last_remaining > 0:
+    # 중지 상태일 때 마지막 남은 시간 표시
+    remaining_time = st.session_state.last_remaining
+    hours_display = int(remaining_time // 3600)
+    minutes_display = int((remaining_time % 3600) // 60)
+    seconds_display = int(remaining_time % 60)
+    timer_html = f"""
+    <div style="
+        text-align: center;
+        font-size: 4em;
+        font-weight: bold;
+        color: #FF4B4B; /* Streamlit primary color */
+        text-shadow: 2px 2px 8px rgba(0,0,0,0.3);
+        margin-top: 20px;
+    ">
+        {hours_display:02d}:{minutes_display:02d}:{seconds_display:02d}
+    </div>
+    """
+    timer_placeholder.markdown(timer_html, unsafe_allow_html=True)
+
+
+if start_button:
+    if total_seconds > 0:
+        # 중지 후 다시 시작하는 경우 남은 시간부터 시작
+        if st.session_state.last_remaining > 0 and st.session_state.start_time is None:
+            st.session_state.total_duration = st.session_state.last_remaining
+            st.session_state.start_time = time.time()
+            st.session_state.end_time = st.session_state.start_time + st.session_state.total_duration
+            st.session_state.timer_running = True
+            st.session_state.last_remaining = 0 # 다시 시작했으므로 남은 시간 초기화
+        # 새로 시작하는 경우
+        elif st.session_state.start_time is None:
+            st.session_state.total_duration = total_seconds
+            st.session_state.start_time = time.time()
+            st.session_state.end_time = st.session_state.start_time + total_seconds
+            st.session_state.timer_running = True
+            st.session_state.last_remaining = 0 # 새로 시작했으므로 남은 시간 초기화
+        else:
+             st.warning("타이머가 이미 실행 중입니다.")
+    else:
+        st.warning("시간을 설정해주세요!")
+
 
 if stop_button:
-    st.session_state.timer_running = False
-    # 남은 시간을 계산하여 저장 (다시 시작 시 이어서)
-    if st.session_state.start_time is not None:
-        elapsed = time.time() - st.session_state.start_time
-        remaining = max(0, st.session_state.total_duration - elapsed)
-        st.session_state.total_duration = remaining # 남은 시간을 새로운 총 시간으로 설정
-    st.session_state.start_time = None # 시작 시간 초기화
+    if st.session_state.timer_running:
+        st.session_state.timer_running = False
+        # 남은 시간을 계산하여 저장 (다시 시작 시 이어서)
+        if st.session_state.start_time is not None:
+            elapsed = time.time() - st.session_state.start_time
+            remaining = max(0, st.session_state.total_duration - elapsed)
+            st.session_state.last_remaining = remaining # 남은 시간을 저장
+        st.session_state.start_time = None # 시작 시간 초기화
+    else:
+        st.info("타이머가 실행 중이 아닙니다.")
+
 
 if reset_button:
     st.session_state.timer_running = False
     st.session_state.start_time = None
     st.session_state.end_time = None
     st.session_state.total_duration = 0
+    st.session_state.last_remaining = 0
+    # 입력 필드 값도 초기화 (세션 상태 사용)
+    st.session_state.hours_input = 0
+    st.session_state.minutes_input = 0
+    st.session_state.seconds_input = 0
     timer_placeholder.markdown("## ⏳ 00:00:00") # 초기화 시 디스플레이 초기화
+    st.rerun() # 상태 변경 후 새로고침하여 입력 필드 값 반영
+
 
 # --- 타이머 카운트다운 로직 ---
 if st.session_state.timer_running and st.session_state.end_time is not None:
@@ -120,31 +197,10 @@ if st.session_state.timer_running and st.session_state.end_time is not None:
     # 타이머 종료 시 메시지
     if st.session_state.timer_running: # 종료 시에도 timer_running이 True인 경우 (자연 종료)
         st.session_state.timer_running = False
+        st.session_state.last_remaining = 0 # 종료되었으므로 남은 시간 없음
         timer_placeholder.markdown("## 🎉 시간 종료! 🎉", unsafe_allow_html=True)
         st.balloons() # 풍선 효과 추가!
-
-# 타이머가 시작되지 않았거나 중지된 상태일 때 마지막 남은 시간 표시
-elif st.session_state.total_duration > 0 and st.session_state.start_time is None:
-     remaining_time = st.session_state.total_duration
-     hours_display = int(remaining_time // 3600)
-     minutes_display = int((remaining_time % 3600) // 60)
-     seconds_display = int(remaining_time % 60)
-     timer_html = f"""
-     <div style="
-         text-align: center;
-         font-size: 4em;
-         font-weight: bold;
-         color: #FF4B4B; /* Streamlit primary color */
-         text-shadow: 2px 2px 8px rgba(0,0,0,0.3);
-         margin-top: 20px;
-     ">
-         {hours_display:02d}:{minutes_display:02d}:{seconds_display:02d}
-     </div>
-     """
-     timer_placeholder.markdown(timer_html, unsafe_allow_html=True)
-else:
-    # 초기 상태 또는 리셋 상태일 때
-    timer_placeholder.markdown("## ⏳ 00:00:00")
+        st.rerun() # 종료 후 상태 변경 반영
 
 # --- 추가적인 화려함 (선택 사항) ---
 st.markdown("---")
